@@ -1,6 +1,7 @@
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
+import plotly.figure_factory as ff
 from matplotlib import pyplot as plt
 
 from src.constants import labels
@@ -60,3 +61,37 @@ def class_distribution(y_train, y_test):
     )
 
     fig.show()
+
+
+# Function to visualize histogram distributions (all pixels and single channels) for a single image
+def hisogram_distributions(instance, X):
+
+    img = X[instance]
+
+    red_channel = img[:, :, 0].flatten()
+    green_channel = img[:, :, 1].flatten()
+    blue_channel = img[:, :, 2].flatten()
+    all_pixels = img.flatten()
+
+
+    fig1 = ff.create_distplot(
+        [all_pixels],
+        group_labels=['All Pixels'],
+        show_hist=True,
+        show_rug=True,
+        colors=['grey']
+    )
+
+    fig2 = ff.create_distplot(
+        [red_channel, green_channel, blue_channel], 
+        group_labels=['Red', 'Green', 'Blue'], 
+        show_hist=True, 
+        show_rug=True,
+        colors=['red', 'green', 'blue']
+    )
+
+    fig1.update_layout(title='All combined Pixels Distribution', xaxis_title='Pixel Intensity', yaxis_title='Probability Density')
+    fig2.update_layout(title='Channels (R, G, B) Distributions', xaxis_title='Pixel Intensity', yaxis_title='Probability Density')
+
+    fig1.show()
+    fig2.show()
