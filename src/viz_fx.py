@@ -4,7 +4,7 @@ import plotly.graph_objects as go
 import plotly.figure_factory as ff
 from matplotlib import pyplot as plt
 
-from src.constants import labels
+from src.constants import LABELS
 
 # Function to visualize n (rows * cols) numbers of images from training or test set
 def images_viz(rows, cols, set_length, X, y, set = 'train'):
@@ -16,7 +16,7 @@ def images_viz(rows, cols, set_length, X, y, set = 'train'):
         img = np.random.randint(0, set_length)
         axes[i].imshow(X[img,])
         label = int(y[img])
-        axes[i].set_title(labels[label], fontsize = 15)
+        axes[i].set_title(LABELS[label], fontsize = 15)
         axes[i].axis('off')
 
     plt.show()
@@ -27,7 +27,7 @@ def class_distribution(y_train, y_test):
     train_label_counts = np.bincount(y_train)
     test_label_counts = np.bincount(y_test)
 
-    label_names = [labels[i] for i in np.arange(0,10)]
+    label_names = [LABELS[i] for i in np.arange(0,10)]
 
     fig = go.Figure()
 
