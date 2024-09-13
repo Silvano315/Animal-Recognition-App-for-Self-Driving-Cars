@@ -34,7 +34,7 @@ def viz_images_generator(data_gen, X):
     plt.figure(figsize=(16,16))
     for i in range(1,17):
         plt.subplot(4,4,i)
-        batch = images.next()
+        batch = next(images)
         image = batch[0].astype("uint8")
         plt.imshow(image)
         plt.axis("off")
