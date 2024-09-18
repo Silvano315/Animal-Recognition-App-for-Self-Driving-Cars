@@ -1,10 +1,14 @@
 import pickle
+import os
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 import matplotlib.pyplot as plt
+from sklearn.metrics import ConfusionMatrixDisplay, classification_report, confusion_matrix
+import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 
 # Plot a choosen metric from history file
@@ -170,6 +174,52 @@ def bar_plot_metric_perfomances(df_metric):
     }])
 
     return fig
+
+
+def evaluate_model_and_save_results(model, model_name, X_test, y_test_binary, BATCH_SIZE, SEED, results_file='Results/test_metrics.csv'):
+    test_datagen = ImageDataGenerator(rescale=1./255)
+    test_generator = test_datagen.flow(
+        X_test,
+        y_test_binary,
+        batch_size=BATCH_SIZE,
+        seed=SEED,
+        shuffle=False  # Keep shuffle False for evaluation
+    )
+    
+    evaluation = model.evaluate(test_generator)
+    test_loss = evaluation[0]
+    test_accuracy = evaluation[1] * 100
+    test_precision = evaluation[2] * 100
+    print(f'Test Loss: {test_loss:.3f}')
+    print(f'Test Accuracy: {test_accuracy:.3f}%')
+    print(f'Test Precision: {test_precision:.3f}%')
+    
+    results_dir = os.path.dirname(results_file)
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
+    if os.path.exists(results_file):
+        df = pd.read_csv(results_file)
+    else:
+        df = pd.DataFrame(columns=['Model', 'Test Loss', 'Test Accuracy', 'Test Precision'])
+    new_row = {
+        'Model': model_name,
+        'Test Loss': round(test_loss, 3),
+        'Test Accuracy': round(test_accuracy, 3),
+        'Test Precision': round(test_precision, 3)
+    }
+    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+    df.to_csv(results_file, index=False)
+    
+    y_pred_prob = model.predict(test_generator)
+    y_pred = tf.where(y_pred_prob <= 0.5, 0, 1).numpy()  # Convert probabilities to binary labels (sigmoid activation fx for last Dense layer)
+    
+    cm = confusion_matrix(test_generator.y, y_pred)
+    disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[0, 1])
+    fig, ax = plt.subplots(figsize=(6, 6))
+    disp.plot(xticks_rotation='horizontal', ax=ax, cmap=plt.cm.Blues)
+    plt.show()
+    
+    print(classification_report(test_generator.y, y_pred))
 
 
 def calculate_mean_std(data):
