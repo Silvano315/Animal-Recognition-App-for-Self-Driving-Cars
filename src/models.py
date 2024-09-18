@@ -5,10 +5,6 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 
 
-
-
-
-
 # Plot a choosen metric from history file
 def scatter_plot_metrics(file_name):
 

@@ -5,20 +5,34 @@ from sklearn.model_selection import train_test_split
 
 from src.constants import BINARY_LABELS, LABELS, BATCH_SIZE, SEED
 
-# Function to create two data generator: train and test/val
-def data_gen():
 
-    train_datagen =  ImageDataGenerator(
-        rotation_range = 15,
-        width_shift_range = 0.1,
-        height_shift_range = 0.1,
-        #rescale = 1./255,
-        #shear_range = 0.2,
-        #brightness_range=[0.1, 1.5],
-        #zoom_range=[0.3, 1.5],
-        horizontal_flip = True,
-        #fill_mode = 'nearest'
-    )
+# Function to create two data generator: train and test/val
+def data_gen(rescale_train = True):
+
+    if rescale_train:
+        train_datagen =  ImageDataGenerator(
+            rotation_range = 15,
+            width_shift_range = 0.1,
+            height_shift_range = 0.1,
+            rescale = 1./255,
+            #shear_range = 0.2,
+            #brightness_range=[0.1, 1.5],
+            #zoom_range=[0.3, 1.5],
+            horizontal_flip = True,
+            #fill_mode = 'nearest'
+        )
+    else:
+        train_datagen =  ImageDataGenerator(
+            rotation_range = 15,
+            width_shift_range = 0.1,
+            height_shift_range = 0.1,
+            #rescale = 1./255,
+            #shear_range = 0.2,
+            #brightness_range=[0.1, 1.5],
+            #zoom_range=[0.3, 1.5],
+            horizontal_flip = True,
+            #fill_mode = 'nearest'
+        )
 
     test_datagen = ImageDataGenerator(
         rescale = 1./255
