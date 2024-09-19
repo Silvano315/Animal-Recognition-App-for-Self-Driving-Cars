@@ -29,8 +29,11 @@ BINARY_LABELS = {
 # Define seed
 SEED = 59
 
+# Define number of classes
+NUM_CLASSES = 2
+
 # Define batch size 
 BATCH_SIZE = 32
 
-#Define input shape
+# Define input shape
 INPUT_SHAPE = (32, 32, 3)
