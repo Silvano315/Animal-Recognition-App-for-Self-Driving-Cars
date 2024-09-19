@@ -9,6 +9,9 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay, classification_report, confusion_matrix
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
+import random
+
+from src.constants import BATCH_SIZE, SEED
 
 
 # Plot a choosen metric from history file
@@ -176,7 +179,7 @@ def bar_plot_metric_perfomances(df_metric):
     return fig
 
 
-def evaluate_model_and_save_results(model, model_name, X_test, y_test_binary, BATCH_SIZE, SEED, results_file='Results/test_metrics.csv'):
+def evaluate_model_and_save_results(model, model_name, X_test, y_test_binary, results_file='Results/test_metrics.csv'):
     test_datagen = ImageDataGenerator(rescale=1./255)
     test_generator = test_datagen.flow(
         X_test,
@@ -220,6 +223,37 @@ def evaluate_model_and_save_results(model, model_name, X_test, y_test_binary, BA
     plt.show()
     
     print(classification_report(test_generator.y, y_pred))
+
+
+def plot_misclassified_images(model, X_test, y_test_binary, class_labels, num_images=25):
+    test_datagen = ImageDataGenerator(rescale=1./255)
+    test_generator = test_datagen.flow(
+        X_test,
+        y_test_binary,
+        batch_size=BATCH_SIZE,
+        seed=SEED,
+        shuffle=False  # Keep shuffle False for evaluation
+    )
+    y_pred_prob = model.predict(test_generator)
+    y_pred = np.where(y_pred_prob <= 0.5, 0, 1)
+    misclassified_indices = np.where(y_pred.flatten() != test_generator.y.flatten())[0]
+    
+    if len(misclassified_indices) < num_images:
+        print(f"There are only {len(misclassified_indices)} available wrong images.")
+        num_images = len(misclassified_indices)
+    random_indices = random.sample(list(misclassified_indices), num_images)
+    
+    plt.figure(figsize=(12, 12))
+    for i, idx in enumerate(random_indices):
+        plt.subplot(5,5,i+1)
+        plt.imshow(X_test[idx])
+        plt.axis("off")
+        predicted_label = class_labels[int(y_pred[idx])]
+        true_label = class_labels[int(test_generator.y[idx])]
+        plt.title(f"Pred: {predicted_label}\nTrue: {true_label}", fontsize=12)
+    
+    plt.tight_layout()
+    plt.show()
 
 
 def calculate_mean_std(data):
