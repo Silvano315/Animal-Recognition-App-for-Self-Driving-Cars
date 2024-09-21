@@ -91,7 +91,7 @@ The number of units in dense layers, filters in convolutional layers, and other 
 Below is the summary of the training and validation performance metrics, including accuracy, loss, and precision. The metrics include both mean and standard deviation in the same column for clarity. For further details about how models were built, see `Description` in [results csv](Results/report_results.csv)
 
 | Model  | Training Accuracy (Mean ± Std) | Training Loss (Mean ± Std) | Training Precision (Mean ± Std) | Validation Accuracy (Mean ± Std) | Validation Loss (Mean ± Std) | Validation Precision (Mean ± Std) |
-|--------|-------------------------------|----------------------------|---------------------------------|----------------------------------|-----------------------------|------------------------------------|-------------|
+|--------|-------------------------------|----------------------------|---------------------------------|----------------------------------|-----------------------------|------------------------------------|
 | Model 1| 91.17% ± 1.45%                | 0.2371 ± 0.0479            | 92.05% ± 1.14%                 | 91.05% ± 2.45%                  | 0.2392 ± 0.0664             | 93.25% ± 4.53%                    |
 | Model 2| 93.19% ± 1.89%                | 0.1884 ± 0.0607            | 93.83% ± 1.57%                 | 92.52% ± 2.63%                  | 0.2004 ± 0.0673             | 96.05% ± 2.63%                    | 
 | Model 3| 91.83% ± 1.79%                | 0.2426 ± 0.0512            | 91.97% ± 1.20%                 | 91.15% ± 6.18%                  | 0.2587 ± 0.1642             | 94.74% ± 2.83%                    | 
