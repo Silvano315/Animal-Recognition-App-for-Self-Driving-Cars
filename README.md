@@ -4,6 +4,7 @@
 
 - [Project Overview](#project-overview)
 - [Dataset](#dataset)
+- [Visualization and Preprocessing](#visualization-and-preprocessing)
 - [Custom CNN Models](#custom-cnn-models)
   - [Model Architecture](#model-architecture)
   - [Results of Custom CNNs](#results-of-custom-cnns)
@@ -45,7 +46,7 @@ Project steps and information:
     - Examination of the erroneous images and reflection on possible improvements to the model.
 
 ## Dataset
-The [**CIFAR-10**](https://www.tensorflow.org/datasets/catalog/cifar10) dataset, which consists of 60,000 32x32 color images in 10 different classes (airplanes, birds, cars, etc.), was used in this project. For the purpose of **binary classification**, we selected **two specific classes** for classification:
+The [**CIFAR-10**](https://www.tensorflow.org/datasets/catalog/cifar10) dataset, which consists of 60,000 32x32 color images in 10 different classes (airplanes, birds, cars, etc.), was used in this project. For the purpose of **binary classification**, I selected **two specific classes** for classification:
 
 - **Class 1**: Vehicles
 - **Class 2**: Animals
@@ -56,6 +57,28 @@ The dataset is split into training, validation, and test sets:
 - **Training set**: Used for training the models.
 - **Validation set**: Used for model evaluation during training to tune hyperparameters and avoid overfitting.
 - **Test set**: Used for final evaluation of model performance.
+
+## Visualization and Preprocessing
+
+### Data Preprocessing
+
+I employed **ImageDataGenerator** to augment the training data. This approach helped increase the diversity of the training dataset through techniques such as rotation, width and height shifts, and horizontal flips. Data augmentation is beneficial as it can improve model generalization by introducing variability in the training samples, reducing the likelihood of overfitting.
+
+### Interactive Plots with Plotly
+
+To enhance the analysis of model performance, I utilized **Plotly** to create interactive graphs. These visualizations feature dropdown menus, allowing users to select different metrics to view, which makes it easy to compare the performances of various models.
+
+### 3D Visualization with Visualkeras
+
+For a better understanding of the custom CNN architectures, I employed [**Visualkeras**](https://github.com/paulgavrikov/visualkeras). This library enabled me to generate a 3D representation of the model structure, providing insights into the flow of data through the network layers.
+
+![3D Model Visualization](images/visualkeras_model.png) 
+
+### Confusion Matrix
+
+To assess the classification performance on the test dataset, I used a confusion matrix. This visualization highlights the true versus predicted classifications, making it clear where the model tends to make mistakes—particularly with classes that share similar visual features, such as birds and airplanes.
+
+These visual tools not only facilitated a deeper understanding of model performance but also aided in diagnosing areas for improvement. You can find everything in the [`noteboook`](CNN_model.ipynb).
 
 ## Custom CNN Models
 
