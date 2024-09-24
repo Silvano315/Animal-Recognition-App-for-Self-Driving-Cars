@@ -1,117 +1,358 @@
-import pickle
 import os
 import numpy as np
 import pandas as pd
-import plotly.graph_objects as go
-import plotly.express as px
-from plotly.subplots import make_subplots
 import matplotlib.pyplot as plt
-from sklearn.metrics import ConfusionMatrixDisplay, classification_report, confusion_matrix
 import tensorflow as tf
+
+from typing import List, Any
+from sklearn.metrics import confusion_matrix, classification_report, ConfusionMatrixDisplay
+from sklearn.utils.class_weight import compute_class_weight
+from tensorflow import keras
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-import random
+from tensorflow.keras.backend import clear_session
+from tensorflow.keras import layers, Model
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import (Input, Dense, MaxPooling2D, BatchNormalization, Dropout, 
+                                     Conv2D, GlobalAveragePooling2D)
+from tensorflow.keras.applications import EfficientNetB0, ResNet50V2, InceptionV3
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras import regularizers, initializers
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, Callback
 
-from src.constants import BATCH_SIZE, SEED
+
+from src.constants import BATCH_SIZE, SEED, INPUT_SHAPE
+from src.utils import calculate_mean_std
 
 
-# Plot a choosen metric from history file
-def scatter_plot_metrics(file_name):
+def build_cnn_model(input_shape: tuple, learning_rate: float = 1e-3, lr_dense: float = 1e-3) -> Sequential:
+    """
+    Builds and compiles a CNN model for binary classification.
 
-    with open("History_models/"+file_name, 'rb') as history_file:
-        history = pickle.load(history_file)
+    Args:
+        input_shape (tuple): The shape of the input data (height, width, channels).
+        learning_rate (float): Learning rate for the optimizer.
+        lr_dense (float): Learning rate for the regularizers in the Dense layers.
 
-    epochs = list(range(1, len(next(iter(history.values()))) + 1))
-
-    fig = go.Figure()
-
-    dropdown_buttons = []
-    metric_pairs = {}
-    for key in history.keys():
-        if key.startswith('val_'):
-            metric_name = key[4:] 
-            if metric_name in history:
-                metric_pairs[metric_name] = (history[metric_name], history[key])
+    Returns:
+        Sequential: Compiled CNN model.
+    """
     
-    for i, (metric, (train_data, val_data)) in enumerate(metric_pairs.items()):
-        train_mean, train_std = calculate_mean_std(train_data)
-        val_mean, val_std = calculate_mean_std(val_data)
-        fig.add_trace(go.Scatter(
-            x=epochs, y=train_data, mode='lines+markers', visible=(i == 0),
-            name=f'Train {metric.capitalize()} (Mean: {train_mean:.2f}, Std: {train_std:.2f})'
-        ))
-        fig.add_trace(go.Scatter(
-            x=epochs, y=val_data, mode='lines+markers', visible=(i == 0),
-            name=f'Val {metric.capitalize()} (Mean: {val_mean:.2f}, Std: {val_std:.2f})'
-        ))
+    clear_session()  # Clear previous models from memory
+    model = Sequential()
 
-        dropdown_buttons.append({
-            'label': metric.capitalize(),
-            'method': 'update',
-            'args': [
-                {'visible': [False] * len(metric_pairs) * 2},  
-                {'title': f'{metric.capitalize()}'}
-            ]
-        })
-        dropdown_buttons[-1]['args'][0]['visible'][i*2] = True  
-        dropdown_buttons[-1]['args'][0]['visible'][i*2 + 1] = True  
+    # Input Layer
+    model.add(Input(shape=input_shape, name="Input Layer"))
 
-    fig.update_layout(
-        title=f'Model Performance per Epoch',
-        xaxis_title='Epoch',
-        yaxis_title='Metric Value',
-        updatemenus=[{
-            'buttons': dropdown_buttons,
-            'direction': 'down',
-            'showactive': True,
-        }],
-        legend_title="Legend"
+    # Block 1
+    model.add(Conv2D(filters=32, kernel_size=(3, 3), padding="same", activation='relu',
+                     kernel_initializer=initializers.GlorotUniform(), name="block1_conv1"))
+    model.add(BatchNormalization())
+    model.add(Conv2D(filters=32, kernel_size=(3, 3), padding="same", activation='relu', name="block1_conv2"))
+    model.add(BatchNormalization())
+    model.add(MaxPooling2D(pool_size=(2, 2), padding="valid", name="block1_maxpool"))
+    model.add(Dropout(0.3))
+
+    # Block 2
+    model.add(Conv2D(filters=64, kernel_size=(3, 3), padding="same", activation='relu', name="block2_conv1"))
+    model.add(BatchNormalization())
+    model.add(Conv2D(filters=64, kernel_size=(3, 3), padding="same", activation='relu', name="block2_conv2"))
+    model.add(BatchNormalization())
+    model.add(MaxPooling2D(pool_size=(2, 2), padding="valid", name="block2_maxpool"))
+    model.add(Dropout(0.3))
+
+    # Block 3
+    model.add(Conv2D(filters=128, kernel_size=(3, 3), padding="same", activation='relu', name="block3_conv1"))
+    model.add(BatchNormalization())
+    model.add(Conv2D(filters=128, kernel_size=(3, 3), padding="same", activation='relu', name="block3_conv2"))
+    model.add(BatchNormalization())
+    model.add(MaxPooling2D(pool_size=(2, 2), padding="valid", name="block3_maxpool"))
+    model.add(Dropout(0.3))
+
+    model.add(GlobalAveragePooling2D())
+    model.add(Dropout(0.3))
+    model.add(Dense(units=256, activation='relu', kernel_regularizer=regularizers.L2(lr_dense)))
+    """model.add(Dropout(0.2))
+    model.add(Dense(
+        units = 128, activation = 'relu', kernel_regularizer = regularizers.L2(lr_dense)
+    ))"""
+    model.add(Dropout(0.5))
+    model.add(Dense(units=1, activation='sigmoid'))  # Output layer for binary classification
+
+    # Compile model
+    adam_opt = Adam(learning_rate=learning_rate)
+    model.compile(loss='binary_crossentropy', optimizer=adam_opt, metrics=['accuracy', 'precision'])
+
+    return model
+
+
+def train_model(
+    model: Any,
+    train_generator: ImageDataGenerator,
+    val_generator: ImageDataGenerator,
+    epochs: int = 30,
+    early_stop_patience: int = 5,
+    class_imb: bool = False
+) -> Any:
+    """
+    Trains a CNN model using data generators for training and validation.
+
+    Args:
+        model (Any): The CNN model to train.
+        train_generator (ImageDataGenerator): The training data generator.
+        val_generator (ImageDataGenerator): The validation data generator.
+        epochs (int): Number of training epochs.
+        early_stop_patience (int): Patience for early stopping.
+        class_imb (bool): boolean to decide whether to apply class balancings
+
+    Returns:
+        Any: Training history of the model.
+    """
+    
+    # Calculate steps per epoch and validation steps
+    #epochs_step = train_generator.n // train_generator.batch_size
+    #val_steps = val_generator.n // val_generator.batch_size
+    
+    # Early stopping callback
+    callback_early_stop = EarlyStopping(monitor='val_loss', patience=early_stop_patience, restore_best_weights=True)
+
+    if class_imb:
+        # Compute class weights to handle class imbalance
+        class_weights = compute_class_weight('balanced', classes=np.unique(train_generator.classes), y=train_generator.classes)
+        weights = {0: class_weights[0], 1: class_weights[1]}
+
+        history = model.fit(
+        train_generator,
+        epochs=epochs,
+        validation_data=val_generator,
+        class_weight=weights,
+        validation_steps=None,
+        steps_per_epoch=None,
+        callbacks=[callback_early_stop],
+        verbose=1
     )
+    else:
+        history = model.fit(
+            train_generator,
+            epochs=epochs,
+            validation_data=val_generator,
+            validation_steps=None,
+            steps_per_epoch=None,
+            callbacks=[callback_early_stop],
+            verbose=1
+        )
 
-    fig.show()
-
-
-def plot_model_history(history):
-
-    fig = plt.figure(figsize=(12, 16))
-
-    mean_loss, std_loss = calculate_mean_std(history['loss'])
-    mean_val_loss, std_val_loss = calculate_mean_std(history['val_loss'])
-    plt.subplot(4, 2, 1)
-    plt.plot(history['loss'], label=f'Loss (mean: {mean_loss:.3f} ± {std_loss:.3f})')
-    plt.plot(history['val_loss'], label=f'Val Loss (mean: {mean_val_loss:.3f} ± {std_val_loss:.3f})')
-    plt.title('Loss Metric per epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.legend()
-
-    # Accuracy
-    mean_acc, std_acc = calculate_mean_std(history['accuracy'])
-    mean_val_acc, std_val_acc = calculate_mean_std(history['val_accuracy'])
-    plt.subplot(4, 2, 2)
-    plt.plot(history['accuracy'], label=f'Accuracy (mean: {mean_acc:.3f} ± {std_acc:.3f})')
-    plt.plot(history['val_accuracy'], label=f'Val Accuracy (mean: {mean_val_acc:.3f} ± {std_val_acc:.3f})')
-    plt.title('Accuracy Metric per epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Accuracy')
-    plt.legend()
-
-    # Precision
-    mean_prec, std_prec = calculate_mean_std(history['precision'])
-    mean_val_prec, std_val_prec = calculate_mean_std(history['val_precision'])
-    plt.subplot(4, 2, 3)
-    plt.plot(history['precision'], label=f'Precision (mean: {mean_prec:.3f} ± {std_prec:.3f})')
-    plt.plot(history['val_precision'], label=f'Val Precision (mean: {mean_val_prec:.3f} ± {std_val_prec:.3f})')
-    plt.title('Precision Metric per epochs')
-    plt.xlabel('Epochs')
-    plt.ylabel('Precision')
-    plt.legend()
-
-    plt.tight_layout()
-    return fig
+    return history
 
 
-# function to add a model name, description, performance to report.csv
-def add_to_report(model_name, metrics, description, report, file_path):
+
+
+def build_resnet_model(adam_lr: float = 1e-3) -> keras.Model:
+    """
+    Builds and compiles a ResNet model for binary classification.
+
+    Args:
+        adam_lr (float): Learning rate for the Adam optimizer.
+
+    Returns:
+        keras.Model: A compiled Keras model.
+    """
+    inputs = keras.Input(shape=INPUT_SHAPE)
+    x = layers.UpSampling2D(size=(7, 7))(inputs)
+
+    base_model = ResNet50V2(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+    base_model.trainable = False  # Freeze the base model
+
+    x = base_model(x, training=False)
+    x = layers.GlobalAveragePooling2D()(x)
+    #x = layers.BatchNormalization()(x)
+    #x = layers.Dropout(0.1)(x)
+    x = layers.Dense(1028, activation='relu')(x)
+    x = layers.Dense(512, activation='relu')(x)
+    x = layers.Dropout(0.1)(x)
+    outputs = layers.Dense(1, activation='sigmoid')(x)
+    
+    model = keras.Model(inputs, outputs)
+    
+    adam_opt = Adam(learning_rate=adam_lr)
+
+    model.compile(loss='binary_crossentropy', 
+                  optimizer=adam_opt, 
+                  metrics=['accuracy', 'precision'])
+    
+    return model
+
+
+
+def build_inception_model(adam_lr: float = 1e-3) -> keras.Model:
+    """
+    Builds and compiles an InceptionV3 model for binary classification using transfer learning.
+
+    Args:
+        adam_lr (float): Learning rate for the Adam optimizer.
+
+    Returns:
+        keras.Model: A compiled Keras model.
+    """
+    inputs = keras.Input(shape=INPUT_SHAPE)
+    x = layers.UpSampling2D(size=(7, 7))(inputs)
+
+    base_model = InceptionV3(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+    base_model.trainable = True  # Fine-tuning the base model
+
+    x = base_model(x, training=False)
+    x = layers.GlobalAveragePooling2D()(x)
+    
+    x = layers.BatchNormalization()(x)
+    x = layers.Dropout(0.3)(x)
+    x = layers.Dense(256, activation='relu', kernel_regularizer=regularizers.L2(1e-3))(x)
+    x = layers.Dropout(0.2)(x)
+    outputs = layers.Dense(1, activation='sigmoid')(x)
+    
+    model = Model(inputs, outputs)
+    
+    adam_opt = Adam(learning_rate=adam_lr)
+
+    model.compile(loss='binary_crossentropy', 
+                  optimizer=adam_opt, 
+                  metrics=['accuracy', 'precision'])
+    
+    return model
+
+
+def build_efficientnet_model(adam_lr: float = 1e-3) -> keras.Model:
+    """
+    Builds and compiles an EfficientNetB0 model for binary classification using transfer learning.
+
+    Args:
+        adam_lr (float): Learning rate for the Adam optimizer.
+
+    Returns:
+        keras.Model: A compiled Keras model.
+    """
+    inputs = keras.Input(shape=INPUT_SHAPE)
+    x = layers.UpSampling2D(size=(7, 7))(inputs)
+
+    base_model = EfficientNetB0(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+    base_model.trainable = True  # Fine-tuning the base model
+
+    x = base_model(x, training=False)
+    x = layers.GlobalAveragePooling2D()(x)
+    
+    x = layers.BatchNormalization()(x)
+    x = layers.Dropout(0.3)(x)
+    x = layers.Dense(256, activation='relu', kernel_regularizer=regularizers.L2(1e-3))(x)
+    x = layers.Dropout(0.2)(x)
+    
+    outputs = layers.Dense(1, activation='sigmoid')(x)
+    
+    model = Model(inputs, outputs)
+    
+    adam_opt = Adam(learning_rate=adam_lr)
+
+    model.compile(loss='binary_crossentropy', 
+                  optimizer=adam_opt, 
+                  metrics=['accuracy', 'precision'])
+    
+    return model
+
+
+def train_tf_model(model: keras.Model, 
+                train_generator: keras.preprocessing.image.ImageDataGenerator, 
+                val_generator: keras.preprocessing.image.ImageDataGenerator, 
+                epochs: int = 30, 
+                class_imb: bool = False) -> keras.callbacks.History:
+    """
+    Trains a given Keras model using the provided training and validation data generators.
+
+    Args:
+        model (keras.Model): The Keras model to train.
+        train_generator (keras.preprocessing.image.ImageDataGenerator): Data generator for the training set.
+        val_generator (keras.preprocessing.image.ImageDataGenerator): Data generator for the validation set.
+        epochs (int): Number of epochs for training. Default is 30.
+        class_imb (bool): boolean to decide whether to apply class balancings
+
+    Returns:
+        keras.callbacks.History: History object containing training metrics.
+    """
+    callbacks = get_callbacks()
+    #epochs_step = train_generator.n // train_generator.batch_size
+    #val_steps = val_generator.n // val_generator.batch_size
+
+    if class_imb:
+        # Compute class weights to handle class imbalance
+        class_weights = compute_class_weight('balanced', classes=np.unique(train_generator.classes), y=train_generator.classes)
+        weights = {0: class_weights[0], 1: class_weights[1]}
+
+        history = model.fit(
+        train_generator,
+        epochs=epochs,
+        validation_data=val_generator,
+        class_weight=weights,
+        validation_steps=None,
+        steps_per_epoch=None,
+        callbacks=callbacks,
+        verbose=1)
+    else:
+        history = model.fit(
+            train_generator,
+            epochs=epochs,
+            validation_data=val_generator,
+            validation_steps=None,
+            steps_per_epoch=None,
+            callbacks=callbacks,
+            verbose=1
+        )
+
+    return history
+
+
+def get_callbacks(acc_stop: bool = False) -> List[Callback]:
+    """
+    Creates a list of callbacks for model training.
+
+    Args:
+        acc_stop (bool): Whether to include a custom callback to stop training 
+                         when a certain accuracy is reached.
+
+    Returns:
+        List[Callback]: A list of Keras callbacks.
+    """
+    early_stopping = EarlyStopping(monitor='val_accuracy', patience=5, restore_best_weights=True)
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=5, min_lr=1e-6)
+    model_checkpoint = ModelCheckpoint('best_model.keras', save_best_only=True, monitor='val_loss')
+
+    if acc_stop:
+        class CustomCallbackAccStop(Callback):
+            def on_epoch_end(self, epoch: int, logs: dict = None) -> None:
+                if logs.get('accuracy', 0) > 0.99:
+                    print(f"Reached 99% accuracy on epoch {epoch}, stopping training!")
+                    self.model.stop_training = True
+
+        custom_cb = CustomCallbackAccStop()
+        return [early_stopping, reduce_lr, model_checkpoint, custom_cb]
+    else:
+        return [early_stopping, reduce_lr, model_checkpoint]
+
+
+def add_to_report(model_name: str, 
+                  metrics: dict, 
+                  description: str, 
+                  report: pd.DataFrame, 
+                  file_path: str) -> None:
+    """
+    Add model details, including name, description, and performance metrics, to a report.
+
+    Args:
+        model_name (str): The name of the model.
+        metrics (dict): A dictionary of metrics where keys are metric names and values are lists of values.
+        description (str): A brief description of the model.
+        report (pd.DataFrame): The existing report DataFrame to which new data will be added.
+        file_path (str): The file path to save the updated report.
+
+    Returns:
+        None: Updates the report CSV file.
+    """
+    
     metrics_calculated = {}
     for key, values in metrics.items():
         mean, std = calculate_mean_std(values)
@@ -128,58 +369,25 @@ def add_to_report(model_name, metrics, description, report, file_path):
     report.to_csv(file_path, index=False)
 
 
-def bar_plot_metric_perfomances(df_metric):
+def evaluate_model_and_save_results(model: tf.keras.Model, 
+                                     model_name: str, 
+                                     X_test: np.ndarray, 
+                                     y_test_binary: np.ndarray, 
+                                     results_file: str = 'Results/test_metrics.csv') -> None:
+    """
+    Evaluate the model on the test set and save the results to a CSV file.
 
-    metrics = ['accuracy', 'loss', 'precision']
-    dropdown_buttons = []
+    Args:
+        model (tf.keras.Model): The trained Keras model to evaluate.
+        model_name (str): The name of the model for reporting.
+        X_test (np.ndarray): The test set features.
+        y_test_binary (np.ndarray): The binary labels for the test set.
+        results_file (str): The file path to save the evaluation results.
 
-
-    fig = go.Figure()
-
-    for i, metric in enumerate(metrics):
-        fig.add_trace(go.Bar(
-        x=df_metric['Model'],
-        y=df_metric[f'{metric} Mean'].round(3),
-        error_y=dict(type='data', array=df_metric[f'{metric} Std'].round(3), visible=True),
-        name=f'Train {metric.capitalize()}',
-        marker_color='green',
-        visible=(i == 0) 
-        ))
-        fig.add_trace(go.Bar(
-        x=df_metric['Model'],
-        y=df_metric[f'val_{metric} Mean'].round(3),
-        error_y=dict(type='data', array=df_metric[f'val_{metric} Std'].round(3), visible=True),
-        name=f'Validation {metric.capitalize()}',
-        marker_color='coral',
-        visible=(i == 0) 
-        ))
-
-        dropdown_buttons.append({
-            'label': metric.capitalize(),
-            'method': 'update',
-            'args': [
-                {'visible': [False] * len(metrics) * 2},  
-                {'title': f'{metric.capitalize()} Comparison'}
-            ]
-        })
-        dropdown_buttons[-1]['args'][0]['visible'][i * 2] = True   
-        dropdown_buttons[-1]['args'][0]['visible'][i * 2 + 1] = True  
-
-    fig.update_layout(
-    title='Model Comparison: Accuracy, Loss, Precision',
-    xaxis_title='Model',
-    yaxis_title='Metric Value',
-    barmode='group', 
-    updatemenus=[{
-        'buttons': dropdown_buttons,
-        'direction': 'down',
-        'showactive': True,
-    }])
-
-    return fig
-
-
-def evaluate_model_and_save_results(model, model_name, X_test, y_test_binary, results_file='Results/test_metrics.csv'):
+    Returns:
+        None: The function saves the results to a CSV file and prints evaluation metrics.
+    """
+    
     test_datagen = ImageDataGenerator(rescale=1./255)
     test_generator = test_datagen.flow(
         X_test,
@@ -190,9 +398,8 @@ def evaluate_model_and_save_results(model, model_name, X_test, y_test_binary, re
     )
     
     evaluation = model.evaluate(test_generator)
-    test_loss = evaluation[0]
-    test_accuracy = evaluation[1] * 100
-    test_precision = evaluation[2] * 100
+    test_loss, test_accuracy, test_precision = evaluation[0], evaluation[1] * 100, evaluation[2] * 100
+    
     print(f'Test Loss: {test_loss:.3f}')
     print(f'Test Accuracy: {test_accuracy:.3f}%')
     print(f'Test Precision: {test_precision:.3f}%')
@@ -200,10 +407,12 @@ def evaluate_model_and_save_results(model, model_name, X_test, y_test_binary, re
     results_dir = os.path.dirname(results_file)
     if not os.path.exists(results_dir):
         os.makedirs(results_dir)
+
     if os.path.exists(results_file):
         df = pd.read_csv(results_file)
     else:
         df = pd.DataFrame(columns=['Model', 'Test Loss', 'Test Accuracy', 'Test Precision'])
+    
     new_row = {
         'Model': model_name,
         'Test Loss': round(test_loss, 3),
@@ -214,7 +423,7 @@ def evaluate_model_and_save_results(model, model_name, X_test, y_test_binary, re
     df.to_csv(results_file, index=False)
     
     y_pred_prob = model.predict(test_generator)
-    y_pred = tf.where(y_pred_prob <= 0.5, 0, 1).numpy()  # Convert probabilities to binary labels (sigmoid activation fx for last Dense layer)
+    y_pred = tf.where(y_pred_prob <= 0.5, 0, 1).numpy()  # Convert probabilities to binary labels
     
     cm = confusion_matrix(test_generator.y, y_pred)
     disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=[0, 1])
@@ -223,40 +432,3 @@ def evaluate_model_and_save_results(model, model_name, X_test, y_test_binary, re
     plt.show()
     
     print(classification_report(test_generator.y, y_pred))
-
-
-def plot_misclassified_images(model, X_test, y_test_binary, class_labels, num_images=25):
-    test_datagen = ImageDataGenerator(rescale=1./255)
-    test_generator = test_datagen.flow(
-        X_test,
-        y_test_binary,
-        batch_size=BATCH_SIZE,
-        seed=SEED,
-        shuffle=False  # Keep shuffle False for evaluation
-    )
-    y_pred_prob = model.predict(test_generator)
-    y_pred = np.where(y_pred_prob <= 0.5, 0, 1)
-    misclassified_indices = np.where(y_pred.flatten() != test_generator.y.flatten())[0]
-    
-    if len(misclassified_indices) < num_images:
-        print(f"There are only {len(misclassified_indices)} available wrong images.")
-        num_images = len(misclassified_indices)
-    random_indices = random.sample(list(misclassified_indices), num_images)
-    
-    plt.figure(figsize=(12, 12))
-    for i, idx in enumerate(random_indices):
-        plt.subplot(5,5,i+1)
-        plt.imshow(X_test[idx])
-        plt.axis("off")
-        predicted_label = class_labels[int(y_pred[idx])]
-        true_label = class_labels[int(test_generator.y[idx])]
-        plt.title(f"Pred: {predicted_label}\nTrue: {true_label}", fontsize=12)
-    
-    plt.tight_layout()
-    plt.show()
-
-
-def calculate_mean_std(data):
-        mean = np.mean(data)
-        std = np.std(data)
-        return mean, std
