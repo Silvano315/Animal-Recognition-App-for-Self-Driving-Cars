@@ -19,7 +19,7 @@
 
 ## Project Overview
 
-This repository is the third project of the master's degree in AI Engineering with [Profession AI](https://profession.ai), all the credits for the requests and idea go to this team. 
+This repository is the fifth project of the master's degree in AI Engineering with [Profession AI](https://profession.ai), all the credits for the requests and idea go to this team. 
 
 
 VisionTech Solutions aims to develop an automatic image recognition system to distinguish between vehicles and animals, with the aim of optimizing wildlife monitoring operations in urban areas, avoiding road accidents and protecting both animals and vehicles. VisionTech Solutions works with municipal administrations to implement a real-time monitoring system in cities, using cameras installed along the roads to identify and classify vehicles and animals. This system will help prevent road accidents caused by the sudden crossing of animals, warning drivers through electronic road signs.
@@ -154,21 +154,23 @@ The ResNet50v2 model was modified as follows:
 - **ResNet50v2 Base**: The base model was loaded with pre-trained ImageNet weights, with the top layers removed (`include_top=False`).
 - **Global Average Pooling**: Replaces fully connected layers for a more compact representation.
 - **Dense layers**: 
-  - 512 units, ReLU activation with L2 regularization (1e-3)
-  - 256 units, ReLU activation with L2 regularization (1e-3)
+  - 512 units, ReLU activation
+  - 256 units, ReLU activation
 - **Output layer**: Single unit with sigmoid activation for binary classification.
 
 **Optimizer**: Adam (learning rate = 1e-4)  
 **Loss Function**: Binary crossentropy  
 **Metrics**: Accuracy, Precision  
 
+To manage the learning rate, I used a dynamic approach with the `ReduceLROnPlateau` callback.
+
 ### Results of Transfer Learning
 
-The ResNet50v2 model achieved a high validation accuracy (~98%) but slightly lower training accuracy (96-97%), likely due to the heavy regularization and dropout. Here are the final results:
+The ResNet50v2 model achieved a high validation/test accuracy, but slightly lower training accuracy, likely due to have completely freezed the ResNet layers. Here are the final results:
 
-- **Validation accuracy**: ~98%
-- **Training accuracy**: ~96-97%
-- **Test accuracy**: TBD (as the experiment is ongoing)
+- **Validation accuracy**: 98,4%
+- **Training accuracy**: 98,2%/98,3%
+- **Test accuracy**: 98,7%
 
 The discrepancy between training and validation accuracy is likely due to the following factors:
 - Dropout was too aggressive during training, leading to underfitting.
