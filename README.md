@@ -15,6 +15,7 @@
 - [Key Insights](#key-insights)
 - [Conclusions](#conclusions)
 - [How to Run](#how-to-run)
+- [EXTRA: GUI using my model and YOLOv3Tiny](#EXTRA-GUI-using-my-model-and-YOLOv3Tiny)
 
 
 ## Project Overview
@@ -195,3 +196,14 @@ The discrepancy between training and validation accuracy is likely due to the fo
 - Required libraries (`requirements.txt`):
   ```bash
   pip install -r requirements.txt
+  ```
+
+### EXTRA: GUI using my model and YOLOv3Tiny
+
+You can find everything in [this folder](vehicle_animal_detection/), you need to take this files from YOLO:
+- coco.names
+- yolov3-tiny.cfg
+- yoliv3-tiny.weights
+and put them [here](vehicle_animal_detection/models/yolo_tiny/).
+
+This part of the project is in progress, so don't test it. 
