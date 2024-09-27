@@ -14,6 +14,9 @@ class YOLOTinyDetector:
         self.conf_threshold = self.config['models']['yolo_tiny']['confidence_threshold']
         self.nms_threshold = self.config['models']['yolo_tiny']['nms_threshold']
 
+        self.animal_classes = ['dog', 'cat', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe']
+
+
     def detect(self, frame):
         height, width = frame.shape[:2]
         blob = cv2.dnn.blobFromImage(frame, 1/255.0, (416, 416), swapRB=True, crop=False)
@@ -37,15 +40,17 @@ class YOLOTinyDetector:
 
         indices = cv2.dnn.NMSBoxes(boxes, confidences, self.conf_threshold, self.nms_threshold)
         
-        detections = []
+        animal_detections = []
         for i in indices:
             i = i[0] if isinstance(i, tuple) else i
             box = boxes[i]
             x, y, w, h = box
-            detections.append({
-                'bbox': [x, y, x+w, y+h],
-                'class': self.classes[class_ids[i]],
-                'confidence': confidences[i]
-            })
+            class_name = self.classes[class_ids[i]]
+            if class_name in self.animal_classes:
+                animal_detections.append({
+                    'bbox': [x, y, x+w, y+h],
+                    'class': class_name,
+                    'confidence': confidences[i]
+                })
 
-        return detections
+        return animal_detections
