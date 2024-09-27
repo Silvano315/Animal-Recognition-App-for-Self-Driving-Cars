@@ -3,11 +3,11 @@ models:
     weights: 'models/yolo_tiny/yolov3-tiny.weights'
     config: 'models/yolo_tiny/yolov3-tiny.cfg'
     classes: 'models/yolo_tiny/coco.names'
-    confidence_threshold: 0.5
+    confidence_threshold: 0.3
     nms_threshold: 0.4
   classifier:
     path: 'models/classification_model/tf_model_2.keras'
-    confidence_threshold: 0.7
+    confidence_threshold: 0.5
     classes:
       - animal
       - vehicle
