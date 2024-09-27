@@ -22,18 +22,10 @@ class Classifier:
     def classify(self, image):
         try:
             preprocessed_image = self.preprocess_image(image)
-
             prediction = self.model.predict(preprocessed_image)[0][0]
 
-            if prediction >= 0.5:
-                class_name = 'animal'
-                confidence = prediction
-            else:
-                class_name = 'vehicle'
-                confidence = 1 - prediction
-
-            if confidence >= self.confidence_threshold:
-                return {'class': class_name, 'confidence': float(confidence)}
+            if prediction >= self.confidence_threshold:
+                return {'class': 'animal', 'confidence': float(prediction)}
             else:
                 return None
         except Exception as e:
