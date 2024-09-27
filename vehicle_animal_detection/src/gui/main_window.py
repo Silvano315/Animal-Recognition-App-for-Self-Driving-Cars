@@ -14,7 +14,7 @@ class ProcessingThread(QThread):
     frame_processed_signal = pyqtSignal(np.ndarray)
     finished_signal = pyqtSignal(list)
     error_signal = pyqtSignal(str)
-    alert_signal = pyqtSignal(str)  
+    alert_signal = pyqtSignal(str)
 
     def __init__(self, config, video_path, config_path):
         super().__init__()
@@ -23,46 +23,6 @@ class ProcessingThread(QThread):
         self.config_path = config_path
         self.detector = YOLOTinyDetector(self.config)
         self.classifier = Classifier(self.config_path)
-
-    def process_frame(self, frame, detections):
-        animal_detected = False
-        for detection in detections:
-            x1, y1, x2, y2 = map(int, detection['bbox'])
-            class_name = detection['class']
-            confidence = detection['confidence']
-            
-            animals = ['dog', 'cat', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe']
-            vehicles = ['car', 'truck', 'bus', 'motorcycle']
-            
-            if class_name in animals or class_name in vehicles:
-                object_img = frame[y1:y2, x1:x2]
-                
-                try:
-                    classification = self.classifier.classify(object_img)
-                    
-                    if classification and classification['confidence'] >= self.config['models']['classifier']['confidence_threshold']:
-                        if classification['class'] == 'animal':
-                            color = (0, 255, 0)  
-                            label = f"Animal: {class_name} ({confidence:.2f})"
-                            animal_detected = True
-                        else:
-                            color = (0, 0, 255)  
-                            label = f"Vehicle: {class_name} ({confidence:.2f})"
-                        
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                        cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
-                        
-                        if classification['class'] == 'animal':
-                            self.alert_signal.emit(self.config['alerts']['animal_detected'])
-                except Exception as e:
-                    if not hasattr(self, 'last_error') or str(e) != self.last_error:
-                        print(f"Error in classification: {str(e)}")
-                        self.last_error = str(e)
-        
-        if animal_detected:
-            self.alert_signal.emit(self.config['alerts']['animal_detected'])
-        
-        return frame
 
     def run(self):
         cap = cv2.VideoCapture(self.video_path)
@@ -89,6 +49,26 @@ class ProcessingThread(QThread):
 
         cap.release()
         self.finished_signal.emit(processed_frames)
+
+    def process_frame(self, frame, detections):
+        for detection in detections:
+            x1, y1, x2, y2 = map(int, detection['bbox'])
+            object_img = frame[y1:y2, x1:x2]
+            
+            try:
+                classification_result = self.classifier.classify(object_img)
+                
+                if classification_result:
+                    color = (0, 255, 0)  
+                    label = f"Animal ({classification_result['confidence']:.2f})"
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                    cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+                    self.alert_signal.emit(self.config['alerts']['animal_detected'])
+            
+            except Exception as e:
+                print(f"Error in classification: {str(e)}")
+        
+        return frame
 
 
 class PlaybackThread(QThread):
@@ -178,7 +158,7 @@ class MainWindow(QMainWindow):
         if file_name:
             self.video_path = file_name
             self.process_button.setEnabled(True)
-            self.show_alert("Video uploaded. Press 'Edit Video' to start processing.")
+            self.show_alert("Video uploaded. Press 'Process Video' to start processing.")
 
     def process_video(self):
         if self.video_path:
