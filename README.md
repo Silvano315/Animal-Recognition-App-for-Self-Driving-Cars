@@ -201,7 +201,7 @@ The discrepancy between training and validation accuracy is likely due to the fo
 ### EXTRA: GUI using my model and YOLOv3Tiny
 
 The project is organized as follows:
-
+```
 vehicle_animal_detection/
 ├── config/
 │   └── config.yaml
@@ -220,7 +220,7 @@ vehicle_animal_detection/
 │   └── classification_model/
 │       └── tf_model_2.keras
 ├── main.py
-
+```
 
 ### Packages and Technologies Used
 
