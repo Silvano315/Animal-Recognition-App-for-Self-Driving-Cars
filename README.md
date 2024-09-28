@@ -203,10 +203,8 @@ The discrepancy between training and validation accuracy is likely due to the fo
 The project is organized as follows:
 
 vehicle_animal_detection/
-│
 ├── config/
 │   └── config.yaml
-│
 ├── src/
 │   ├── detection/
 │   │   └── yolo_detector.py
@@ -214,7 +212,6 @@ vehicle_animal_detection/
 │   │   └── classifier.py
 │   ├── gui/
 │   │   └── main_window.py
-│   
 ├── models/
 │   ├── yolo_tiny/
 │   │   ├── yolov3-tiny.weights
@@ -223,6 +220,7 @@ vehicle_animal_detection/
 │   └── classification_model/
 │       └── tf_model_2.keras
 ├── main.py
+
 
 ### Packages and Technologies Used
 
