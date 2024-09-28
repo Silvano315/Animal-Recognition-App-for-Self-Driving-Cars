@@ -200,10 +200,62 @@ The discrepancy between training and validation accuracy is likely due to the fo
 
 ### EXTRA: GUI using my model and YOLOv3Tiny
 
-You can find everything in [this folder](vehicle_animal_detection/), you need to take this files from YOLO:
-- coco.names
-- yolov3-tiny.cfg
-- yoliv3-tiny.weights
-and put them [here](vehicle_animal_detection/models/yolo_tiny/).
+The project is organized as follows:
 
-This part of the project is in progress, so don't test it. 
+vehicle_animal_detection/
+│
+├── config/
+│   └── config.yaml
+│
+├── src/
+│   ├── detection/
+│   │   └── yolo_detector.py
+│   ├── classification/
+│   │   └── classifier.py
+|   ├── gui/
+│       └── main_window.py
+│   
+├── models/
+│   ├── yolo_tiny/
+│   │   ├── yolov3-tiny.weights
+│   │   ├── yolov3-tiny.cfg
+│   │   └── coco.names
+│   └── classification_model/
+│       └── tf_model_2.keras
+├── main.py
+
+### Packages and Technologies Used
+
+- **PyQt5**: Chosen for its robust GUI capabilities and cross-platform support.
+- **OpenCV (cv2)**: Used for image processing and YOLO implementation due to its efficiency and wide range of computer vision algorithms.
+- **TensorFlow**: Powers custom classifier model, selected for its flexibility and extensive ecosystem.
+- **YAML**: Used for configuration management, providing a human-readable format for easy adjustments.
+
+### YOLO (You Only Look Once)
+
+I implemented YOLOv3-Tiny, a lightweight version of the YOLO object detection system. While not as accurate as full YOLO versions, it offers a good balance between speed and accuracy, making it suitable for real-time applications with limited computational resources.
+
+### GUI Preview
+
+#### Initial Screen
+![Initial Screen](images/gui_initial_screen.png)
+
+#### Animal Detection in Action
+![Animal Detected](images/detected_animal.png)
+
+### Project Limitations and Future Improvements
+
+1. **YOLO Version**: I used an older, lighter version of YOLO. Upgrading to YOLOv5 or YOLOv8 could significantly improve detection accuracy.
+
+2. **Computational Constraints**: The project is designed to run on CPU, which limits real-time performance. GPU acceleration could greatly enhance processing speed.
+
+3. **Classifier Limitations**: My classifier was trained on the CIFAR10 dataset, which is not ideal for the specific task of animal detection in road scenarios. A custom dataset focused on road animals would yield better results.
+
+4. **Potential Improvements**:
+   - Implement a more advanced model from Hugging Face Transformers for classification.
+   - Use transfer learning on a pre-trained model with a custom dataset of road animals.
+   - Explore object tracking algorithms to maintain consistent detection across video frames.
+
+5. **Real-world Application**: While this project serves as a proof of concept, deploying such a system in actual self-driving cars would require extensive testing, optimization, and integration with other vehicular systems.
+
+Despite these limitations, this project demonstrates the potential of combining object detection and classification for specific use cases like animal detection on roads, providing a foundation for further development and optimization.
