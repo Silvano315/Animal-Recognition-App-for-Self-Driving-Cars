@@ -212,8 +212,8 @@ vehicle_animal_detection/
 │   │   └── yolo_detector.py
 │   ├── classification/
 │   │   └── classifier.py
-|   ├── gui/
-│       └── main_window.py
+│   ├── gui/
+│   │   └── main_window.py
 │   
 ├── models/
 │   ├── yolo_tiny/
