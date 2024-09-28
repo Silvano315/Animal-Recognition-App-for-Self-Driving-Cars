@@ -2,12 +2,68 @@ import sys
 import cv2
 import numpy as np
 import yaml
-from PyQt5.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QPushButton, QFileDialog, QLabel, QSlider, QProgressBar
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+                             QPushButton, QFileDialog, QLabel, QSlider, QProgressBar, QStyle, QFrame)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtGui import QImage, QPixmap, QFont, QPalette, QColor
+
 
 from detection.yolo_detector import YOLOTinyDetector
 from classification.classifier import Classifier
+
+class DetectionSmoother:
+    def __init__(self, smoothing_frames=5):
+        self.smoothing_frames = smoothing_frames
+        self.detection_history = []
+
+    def update(self, current_detections):
+        self.detection_history.append(current_detections)
+        if len(self.detection_history) > self.smoothing_frames:
+            self.detection_history.pop(0)
+
+    def get_smoothed_detections(self):
+        if not self.detection_history:
+            return []
+
+        smoothed_detections = []
+        all_detections = [det for frame_dets in self.detection_history for det in frame_dets]
+
+        for det in all_detections:
+            similar_dets = [d for d in all_detections if self.iou(det['bbox'], d['bbox']) > 0.3]
+            if len(similar_dets) >= 2: 
+                avg_bbox = self.average_bbox([d['bbox'] for d in similar_dets])
+                avg_conf = sum(d['confidence'] for d in similar_dets) / len(similar_dets)
+                smoothed_detections.append({
+                    'bbox': avg_bbox,
+                    'class': det['class'],
+                    'confidence': avg_conf
+                })
+
+        return smoothed_detections
+
+    @staticmethod
+    def average_bbox(bboxes):
+        # Calculate average coordinates of bounding box
+        avg_bbox = [
+            sum(box[i] for box in bboxes) / len(bboxes)
+            for i in range(4)
+        ]
+        return [int(coord) for coord in avg_bbox]
+
+    @staticmethod
+    def iou(box1, box2):
+        # Calculate Intersection over Union (IoU) between two bounding box
+        x1 = max(box1[0], box2[0])
+        y1 = max(box1[1], box2[1])
+        x2 = min(box1[2], box2[2])
+        y2 = min(box1[3], box2[3])
+
+        intersection = max(0, x2 - x1) * max(0, y2 - y1)
+        area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+        area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+        union = area1 + area2 - intersection
+
+        return intersection / union if union > 0 else 0
 
 class ProcessingThread(QThread):
     progress_signal = pyqtSignal(int)
@@ -23,6 +79,7 @@ class ProcessingThread(QThread):
         self.config_path = config_path
         self.detector = YOLOTinyDetector(self.config)
         self.classifier = Classifier(self.config_path)
+        self.detection_smoother = DetectionSmoother()
 
     def run(self):
         cap = cv2.VideoCapture(self.video_path)
@@ -37,8 +94,9 @@ class ProcessingThread(QThread):
 
             frame = cv2.resize(frame, tuple(self.config['performance']['target_resolution']))
 
-            detections = self.detector.detect(frame)
-            processed_frame = self.process_frame(frame, detections)
+            #detections = self.detector.detect(frame)
+            #processed_frame = self.process_frame(frame, detections)
+            processed_frame = self.process_frame(frame)
             processed_frames.append(processed_frame)
 
             self.frame_processed_signal.emit(processed_frame)
@@ -50,24 +108,27 @@ class ProcessingThread(QThread):
         cap.release()
         self.finished_signal.emit(processed_frames)
 
-    def process_frame(self, frame, detections):
-        for detection in detections:
+    def process_frame(self, frame):
+        detections = self.detector.detect(frame)
+        self.detection_smoother.update(detections)
+        smoothed_detections = self.detection_smoother.get_smoothed_detections()
+
+        for detection in smoothed_detections:
             x1, y1, x2, y2 = map(int, detection['bbox'])
             object_img = frame[y1:y2, x1:x2]
             
             try:
                 classification_result = self.classifier.classify(object_img)
-                
                 if classification_result:
                     color = (0, 255, 0)  
                     label = f"Animal ({classification_result['confidence']:.2f})"
                     cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
                     cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
                     self.alert_signal.emit(self.config['alerts']['animal_detected'])
-            
+                    print(f"Animal detected and classified: {label}")
             except Exception as e:
                 print(f"Error in classification: {str(e)}")
-        
+
         return frame
 
 
@@ -106,47 +167,123 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle(self.config['gui']['window_title'])
         self.setGeometry(100, 100, self.config['gui']['window_size']['width'], self.config['gui']['window_size']['height'])
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #f0f0f0;
+            }
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                text-align: center;
+                text-decoration: none;
+                font-size: 16px;
+                margin: 4px 2px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+            QLabel {
+                font-size: 14px;
+            }
+            QProgressBar {
+                border: 2px solid grey;
+                border-radius: 5px;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                background-color: #4CAF50;
+                width: 10px;
+            }
+            QSlider::groove:horizontal {
+                border: 1px solid #999999;
+                height: 8px;
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #B1B1B1, stop:1 #c4c4c4);
+                margin: 2px 0;
+            }
+            QSlider::handle:horizontal {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #b4b4b4, stop:1 #8f8f8f);
+                border: 1px solid #5c5c5c;
+                width: 18px;
+                margin: -2px 0;
+                border-radius: 3px;
+            }
+        """)
 
         self.central_widget = QWidget()
         self.setCentralWidget(self.central_widget)
-        self.layout = QVBoxLayout(self.central_widget)
+        self.main_layout = QVBoxLayout(self.central_widget)
 
-        self.video_label = QLabel(self)
+        # Video display area
+        self.video_frame = QFrame()
+        self.video_frame.setFrameStyle(QFrame.Panel | QFrame.Sunken)
+        self.video_frame.setLineWidth(2)
+        self.video_layout = QVBoxLayout(self.video_frame)
+        self.video_label = QLabel()
         self.video_label.setAlignment(Qt.AlignCenter)
-        self.layout.addWidget(self.video_label)
+        self.video_layout.addWidget(self.video_label)
+        self.main_layout.addWidget(self.video_frame, 3)
 
+        # Control buttons
+        self.button_layout = QHBoxLayout()
         self.load_button = QPushButton("Upload Video")
-        self.load_button.clicked.connect(self.load_video)
-        self.layout.addWidget(self.load_button)
-
+        self.load_button.setIcon(self.style().standardIcon(QStyle.SP_DialogOpenButton))
         self.process_button = QPushButton("Process Video")
-        self.process_button.clicked.connect(self.process_video)
+        self.process_button.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
         self.process_button.setEnabled(False)
-        self.layout.addWidget(self.process_button)
-
-        self.play_pause_button = QPushButton("Play/Pause")
-        self.play_pause_button.clicked.connect(self.play_pause_video)
+        self.play_pause_button = QPushButton("Play")
+        self.play_pause_button.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
         self.play_pause_button.setEnabled(False)
-        self.layout.addWidget(self.play_pause_button)
+        
+        self.button_layout.addWidget(self.load_button)
+        self.button_layout.addWidget(self.process_button)
+        self.button_layout.addWidget(self.play_pause_button)
+        self.main_layout.addLayout(self.button_layout)
 
-        self.progress_bar = QProgressBar(self)
-        self.layout.addWidget(self.progress_bar)
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setTextVisible(False)
+        self.main_layout.addWidget(self.progress_bar)
 
+        # Speed control
+        self.speed_layout = QHBoxLayout()
+        self.speed_label = QLabel("Playback Speed:")
         self.speed_slider = QSlider(Qt.Horizontal)
         self.speed_slider.setMinimum(0)
         self.speed_slider.setMaximum(200)
-        self.speed_slider.setValue(0)
+        self.speed_slider.setValue(100)
         self.speed_slider.setTickPosition(QSlider.TicksBelow)
-        self.speed_slider.setTickInterval(10)
-        self.speed_slider.valueChanged.connect(self.change_speed)
-        self.layout.addWidget(self.speed_slider)
+        self.speed_slider.setTickInterval(50)
+        self.speed_layout.addWidget(self.speed_label)
+        self.speed_layout.addWidget(self.speed_slider, 1)
+        self.main_layout.addLayout(self.speed_layout)
 
-        self.alert_label = QLabel(self)
+        # Alert label
+        self.alert_label = QLabel()
         self.alert_label.setAlignment(Qt.AlignCenter)
-        self.alert_label.setStyleSheet("background-color: red; color: white; font-size: 18px;")
+        self.alert_label.setStyleSheet("""
+            background-color: #f44336;
+            color: white;
+            font-size: 18px;
+            padding: 10px;
+            border-radius: 5px;
+        """)
         self.alert_label.hide()
-        self.layout.addWidget(self.alert_label)
+        self.main_layout.addWidget(self.alert_label)
 
+        # Connect signals
+        self.load_button.clicked.connect(self.load_video)
+        self.process_button.clicked.connect(self.process_video)
+        self.play_pause_button.clicked.connect(self.play_pause_video)
+        self.speed_slider.valueChanged.connect(self.change_speed)
+
+        # Initialize variables
         self.video_path = None
         self.processed_frames = None
         self.processing_thread = None
@@ -216,14 +353,15 @@ class MainWindow(QMainWindow):
         self.alert_label.show()
         QTimer.singleShot(3000, self.alert_label.hide)
 
+    def change_speed(self, value):
+        speed = value / 100.0  
+        if self.playback_thread:
+            self.playback_thread.set_delay(int(100 / speed))
+        self.speed_label.setText(f"Playback Speed: {speed:.2f}x")
+
     def show_error(self, error_message):
         print(f"Error: {error_message}")
         self.show_alert(f"Error: {error_message}")
-
-    def change_speed(self, value):
-        delay = value 
-        if self.playback_thread:
-            self.playback_thread.set_delay(delay)
 
     def playback_finished(self):
         self.video_playing = False
