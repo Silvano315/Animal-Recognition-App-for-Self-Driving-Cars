@@ -10,12 +10,14 @@ class Classifier:
         
         self.model = tf.keras.models.load_model(self.config['models']['classifier']['path'])
         self.confidence_threshold = self.config['models']['classifier']['confidence_threshold']
+        self.preprocess_input = tf.keras.applications.resnet_v2.preprocess_input
 
     def preprocess_image(self, image):
         image = cv2.resize(image, (32, 32))
         if image.shape[2] == 3:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         image = image.astype(np.float32) / 255.0
+        #image = self.preprocess_input(image)
         image = np.expand_dims(image, axis=0)
         return image
 

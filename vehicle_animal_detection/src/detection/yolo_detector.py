@@ -13,18 +13,31 @@ class YOLOTinyDetector:
         self.output_layers = self.net.getUnconnectedOutLayersNames()
         self.conf_threshold = self.config['models']['yolo_tiny']['confidence_threshold']
         self.nms_threshold = self.config['models']['yolo_tiny']['nms_threshold']
-
         self.animal_classes = ['dog', 'cat', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe']
-
+        self.frame_buffer = []
+        self.buffer_size = 3  
 
     def detect(self, frame):
+        self.frame_buffer.append(frame)
+        if len(self.frame_buffer) > self.buffer_size:
+            self.frame_buffer.pop(0)
+
+        all_detections = []
+        for buffered_frame in self.frame_buffer:
+            detections = self._detect_single_frame(buffered_frame)
+            all_detections.extend(detections)
+
+        final_detections = self._remove_duplicates(all_detections)
+
+        return final_detections
+
+    def _detect_single_frame(self, frame):
         height, width = frame.shape[:2]
         blob = cv2.dnn.blobFromImage(frame, 1/255.0, (416, 416), swapRB=True, crop=False)
         self.net.setInput(blob)
         layer_outputs = self.net.forward(self.output_layers)
 
         boxes, confidences, class_ids = [], [], []
-
         for output in layer_outputs:
             for detection in output:
                 scores = detection[5:]
@@ -54,3 +67,23 @@ class YOLOTinyDetector:
                 })
 
         return animal_detections
+
+    def _remove_duplicates(self, detections):
+        final_detections = []
+        for detection in detections:
+            if not any(self._iou(detection['bbox'], d['bbox']) > 0.5 for d in final_detections):
+                final_detections.append(detection)
+        return final_detections
+
+    def _iou(self, box1, box2):
+        x1 = max(box1[0], box2[0])
+        y1 = max(box1[1], box2[1])
+        x2 = min(box1[2], box2[2])
+        y2 = min(box1[3], box2[3])
+
+        intersection = max(0, x2 - x1) * max(0, y2 - y1)
+        area1 = (box1[2] - box1[0]) * (box1[3] - box1[1])
+        area2 = (box2[2] - box2[0]) * (box2[3] - box2[1])
+        union = area1 + area2 - intersection
+
+        return intersection / union if union > 0 else 0
