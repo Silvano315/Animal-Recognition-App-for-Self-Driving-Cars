@@ -7,7 +7,7 @@ models:
     nms_threshold: 0.4
   classifier:
     path: 'models/classification_model/tf_model_2.keras'
-    confidence_threshold: 0.5
+    confidence_threshold: 0.8
     classes:
       - animal
       - vehicle
